@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Chat Servers</title>
+<style>
+body{font-family:sans-serif;background:#f2f2f7;padding:20px;}
+#join,#chat{max-width:600px;margin:auto;}
+#chat{display:none;}
+.messages{height:60vh;overflow:auto;border:1px solid #ddd;padding:8px;margin-bottom:8px;background:white;border-radius:6px;}
+.msg{margin-bottom:6px;}
+.msg.system{color:#666;font-style:italic;}
+.meta{color:#555;margin-right:6px;}
+input,button,select{padding:8px;margin:4px;border-radius:6px;border:1px solid #ddd;}
+form{display:flex;gap:8px;}
+form input{flex:1;}
+</style>
+</head>
+<body>
+<div id="join">
+<h2>Join or Create a Server</h2>
+<input id="username" placeholder="Username" maxlength="20">
+<input id="newServer" placeholder="New Server Name" maxlength="32">
+<button id="createBtn">Create / Join</button>
+<h3>Or join existing server:</h3>
+<select id="serverList"></select>
+<button id="joinBtn">Join</button>
+</div>
+
+<div id="chat">
+<div style="display:flex;justify-content:space-between;margin-bottom:8px;">
+  <div id="serverName"></div>
+  <button id="leaveBtn">Leave</button>
+</div>
+<div class="messages" id="messages"></div>
+<form id="msgForm">
+  <input id="msgInput" placeholder="Type a message...">
+  <button>Send</button>
+</form>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket=io();
+const joinScreen=document.getElementById('join');
+const chatScreen=document.getElementById('chat');
+const usernameInput=document.getElementById('username');
+const newServerInput=document.getElementById('newServer');
+const createBtn=document.getElementById('createBtn');
+const serverList=document.getElementById('serverList');
+const joinBtn=document.getElementById('joinBtn');
+const messagesEl=document.getElementById('messages');
+const serverNameEl=document.getElementById('serverName');
+const msgForm=document.getElementById('msgForm');
+const msgInput=document.getElementById('msgInput');
+const leaveBtn=document.getElementById('leaveBtn');
+
+function addMessage(item){
+  const el=document.createElement('div');
+  el.className='msg'+(item.system?' system':'');
+  if(item.system) el.textContent=`[${new Date(item.time).toLocaleTimeString()}] ${item.text}`;
+  else el.innerHTML=`<span class="meta">[${new Date(item.time).toLocaleTimeString()}] <b>${item.user}</b>:</span> ${item.text}`;
+  messagesEl.appendChild(el);
+  messagesEl.scrollTop=messagesEl.scrollHeight;
+}
+
+socket.on('server-list', servers=>{
+  const current = serverList.value;
+  serverList.innerHTML='';
+  servers.forEach(s=>{
+    const opt=document.createElement('option');
+    opt.value=s; opt.textContent=s;
+    serverList.appendChild(opt);
+  });
+  if(servers.includes(current)) serverList.value=current;
+});
+
+function joinServer(name){
+  const user=usernameInput.value.trim()||'Anon';
+  socket.emit('join-server',{serverName:name,user},resp=>{
+    joinScreen.style.display='none';
+    chatScreen.style.display='block';
+    serverNameEl.textContent=`Server: ${name}`;
+    messagesEl.innerHTML='';
+    (resp.history||[]).forEach(addMessage);
+  });
+}
+
+createBtn.addEventListener('click',()=>{
+  const name=newServerInput.value.trim();
+  if(!name) return alert('Enter a server name');
+  joinServer(name.toLowerCase());
+});
+
+joinBtn.addEventListener('click',()=>{
+  const name=serverList.value;
+  if(!name) return alert('Select a server');
+  joinServer(name);
+});
+
+msgForm.addEventListener('submit',e=>{
+  e.preventDefault();
+  const txt=msgInput.value.trim();
+  if(!txt) return;
+  socket.emit('chat-message',txt);
+  msgInput.value='';
+});
+
+socket.on('chat-message',addMessage);
+socket.on('system-message',addMessage);
+leaveBtn.addEventListener('click',()=>window.location.reload());
+</script>
+</body>
+</html>
